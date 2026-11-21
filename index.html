@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>LUCKY BLOCKS BATTLEGROUNDS — offline fan build</title>
+<meta name="description" content="A blocky battle arena where lucky blocks drop tiered loot and bots fight each other for it." />
+<link rel="manifest" href="manifest.json" />
+<meta name="theme-color" content="#0a0f1c" />
+<style>
+  :root {
+    --cyan: #35e0ff;
+    --ink: #070b14;
+    --panel: rgba(12, 18, 32, 0.82);
+    --line: rgba(120, 170, 255, 0.28);
+    --text: #dbe4ff;
+    --dim: #8ea0c8;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%; overflow: hidden;
+    background: var(--ink); color: var(--text);
+    font-family: "Segoe UI", Inter, system-ui, -apple-system, Roboto, Arial, sans-serif;
+    -webkit-user-select: none; user-select: none;
+  }
+  #scene { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+
+  #hud { position: fixed; inset: 0; pointer-events: none; display: none; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; backdrop-filter: blur(6px); }
+
+  #vitals { position: absolute; left: 18px; bottom: 18px; width: 300px; padding: 12px 14px; }
+  #player-name { font-size: 13px; font-weight: 700; letter-spacing: .08em; color: var(--cyan); margin-bottom: 6px; text-transform: uppercase; }
+  .bar { position: relative; height: 18px; background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.12); border-radius: 2px; overflow: hidden; }
+  .bar > i { position: absolute; inset: 0; width: 100%; transition: width .12s linear; display: block; }
+  #hp-fill { background: linear-gradient(90deg,#3ddc84,#8ef07a); }
+  #hp-text { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-shadow: 0 1px 2px #000; }
+  .bar.small { height: 7px; margin-top: 6px; }
+  #shield-fill { background: linear-gradient(90deg,#35e0ff,#a8f4ff); width: 0%; }
+  #weapon-row { margin-top: 10px; display: flex; align-items: center; gap: 8px; }
+  #weapon-name { font-size: 14px; font-weight: 700; }
+  #weapon-tier { font-size: 10px; font-weight: 800; letter-spacing: .1em; padding: 2px 6px; border: 1px solid currentColor; border-radius: 2px; }
+
+  #topbar { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); display: flex; align-items: stretch; gap: 1px; }
+  .stat { padding: 8px 16px; text-align: center; background: var(--panel); border: 1px solid var(--line); }
+  .stat .k { font-size: 9px; letter-spacing: .16em; color: var(--dim); }
+  .stat .v { font-size: 17px; font-weight: 800; letter-spacing: .04em; font-variant-numeric: tabular-nums; }
+  #big-timer { color: var(--cyan); }
+  #wave-label { color: #ffe57a; }
+
+  #board { position: absolute; top: 14px; right: 14px; width: 236px; padding: 8px 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 4px; font-size: 12px; }
+  #board > div { display: flex; align-items: center; gap: 6px; padding: 2px 0; }
+  #board .bhead { color: var(--dim); font-size: 9px; letter-spacing: .14em; border-bottom: 1px solid var(--line); padding-bottom: 4px; margin-bottom: 4px; }
+  #board .bn { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #board .bk, #board .bd { width: 22px; text-align: right; font-variant-numeric: tabular-nums; color: var(--dim); }
+  #board .me .bn { color: var(--cyan); font-weight: 700; }
+  #board .bn.dead { opacity: .45; }
+
+  #feed { position: absolute; top: 14px; left: 14px; width: 300px; display: flex; flex-direction: column; gap: 4px; }
+  .feed-item { font-size: 12px; padding: 5px 9px; background: rgba(8,12,22,.78); border-left: 3px solid var(--cyan); border-radius: 2px; transition: opacity .3s; text-shadow: 0 1px 2px #000; }
+
+  #chat { position: absolute; left: 18px; bottom: 138px; width: 330px; display: flex; flex-direction: column; gap: 3px; }
+  .chat-item { font-size: 12px; color: #c8d4f0; text-shadow: 0 1px 3px #000; transition: opacity .9s; }
+  .chat-item b { color: #ffe57a; }
+  .chat-item.out { opacity: 0; }
+
+  #toast { position: absolute; top: 96px; left: 50%; transform: translate(-50%, 0); font-size: 22px; font-weight: 800; letter-spacing: .06em; opacity: 0; text-shadow: 0 2px 12px rgba(0,0,0,.9); text-align: center; white-space: nowrap; transition: opacity .18s; }
+
+  #plates, #floats { position: absolute; inset: 0; overflow: hidden; }
+  .plate { position: absolute; top: 0; left: 0; width: 92px; text-align: center; will-change: transform; }
+  .plate .pname { font-size: 11px; font-weight: 700; text-shadow: 0 1px 3px #000, 0 0 6px #000; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .plate .pbar { height: 4px; margin-top: 2px; background: rgba(0,0,0,.6); border-radius: 2px; overflow: hidden; }
+  .plate .pbar i { display: block; height: 100%; width: 100%; background: #5ef08a; }
+  .plate-me .pname { color: var(--cyan); }
+  .float { position: absolute; top: 0; left: 0; font-size: 15px; font-weight: 800; text-shadow: 0 2px 4px #000; white-space: nowrap; will-change: transform; }
+
+  #crosshair { position: absolute; top: 50%; left: 50%; width: 18px; height: 18px; transform: translate(-50%, -50%); opacity: .8; }
+  #crosshair::before, #crosshair::after { content: ''; position: absolute; background: #fff; box-shadow: 0 0 3px #000; }
+  #crosshair::before { left: 50%; top: 0; width: 2px; height: 100%; transform: translateX(-50%); }
+  #crosshair::after { top: 50%; left: 0; height: 2px; width: 100%; transform: translateY(-50%); }
+
+  #hint { position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%); font-size: 11px; color: var(--dim); letter-spacing: .06em; text-align: center; background: rgba(8,12,22,.6); padding: 6px 12px; border-radius: 3px; }
+  #hint b { color: var(--text); }
+  #stamp { position: absolute; right: 14px; bottom: 12px; font-size: 10px; color: #5b6b8f; letter-spacing: .06em; }
+  #lockhint { position: absolute; top: 50%; left: 50%; transform: translate(-50%, 60px); font-size: 13px; color: var(--dim); background: rgba(8,12,22,.8); padding: 6px 12px; border: 1px solid var(--line); border-radius: 3px; display: none; }
+
+  #death { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; background: rgba(6, 9, 17, .55); }
+  #death .big { font-size: 40px; font-weight: 900; letter-spacing: .1em; color: #ff6b6b; text-shadow: 0 4px 20px #000; }
+  #death .sub { font-size: 15px; color: var(--text); margin-top: 8px; }
+  #death .timer { font-size: 13px; color: var(--dim); margin-top: 14px; letter-spacing: .1em; }
+
+  #start { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: radial-gradient(circle at 50% 35%, #16203a 0%, #070b14 70%); text-align: center; padding: 24px; }
+  #start h1 { margin: 0; font-size: clamp(28px, 6vw, 62px); font-weight: 900; letter-spacing: .06em; line-height: 1.02; background: linear-gradient(180deg, #fff 0%, #ffe57a 45%, #ff9a3c 100%); -webkit-background-clip: text; background-clip: text; color: transparent; text-shadow: 0 8px 40px rgba(255, 180, 60, .25); }
+  #start h2 { margin: 6px 0 0; font-size: clamp(11px, 1.8vw, 15px); letter-spacing: .42em; color: var(--cyan); font-weight: 700; text-transform: uppercase; }
+  #start p.lead { max-width: 620px; color: var(--dim); font-size: 14px; line-height: 1.6; margin: 22px 0 0; }
+  #play-btn { margin-top: 28px; pointer-events: auto; cursor: pointer; font: inherit; font-weight: 800; font-size: 17px; letter-spacing: .16em; padding: 14px 46px; color: #04121a; text-transform: uppercase; background: linear-gradient(180deg, #8ef0ff, #35e0ff); border: 0; border-radius: 3px; box-shadow: 0 6px 0 #0b7d94, 0 10px 30px rgba(53, 224, 255, .3); transition: transform .08s, box-shadow .08s; }
+  #play-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #0b7d94; }
+  .tiers { display: flex; gap: 10px; margin-top: 30px; flex-wrap: wrap; justify-content: center; }
+  .tier { font-size: 10px; letter-spacing: .12em; font-weight: 800; padding: 5px 10px; border: 1px solid currentColor; border-radius: 2px; }
+  .keys { margin-top: 26px; font-size: 12px; color: var(--dim); letter-spacing: .04em; }
+  .keys kbd { background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.18); border-bottom-width: 2px; border-radius: 3px; padding: 1px 6px; font-family: inherit; color: var(--text); }
+  #mute-state { color: var(--dim); }
+</style>
+</head>
+<body>
+<canvas id="scene"></canvas>
+
+<div id="hud">
+  <div id="feed"></div>
+
+  <div id="topbar">
+    <div class="stat"><div class="k">BIG BLOCK</div><div class="v" id="big-timer">--:--</div></div>
+    <div class="stat"><div class="k">ALIVE</div><div class="v" id="alive-count">8</div></div>
+    <div class="stat"><div class="k">WAVE</div><div class="v" id="wave-label">1</div></div>
+    <div class="stat"><div class="k">YOUR KILLS</div><div class="v" id="kill-count">0</div></div>
+  </div>
+
+  <div id="board"></div>
+  <div id="plates"></div>
+  <div id="floats"></div>
+  <div id="toast"></div>
+  <div id="chat"></div>
+
+  <div id="vitals" class="panel">
+    <div id="player-name">—</div>
+    <div class="bar"><i id="hp-fill"></i><div id="hp-text">100 / 100</div></div>
+    <div class="bar small"><i id="shield-fill"></i></div>
+    <div id="weapon-row">
+      <span id="weapon-name">Bare Hands</span>
+      <span id="weapon-tier">REGULAR</span>
+    </div>
+  </div>
+
+  <div id="crosshair"></div>
+  <div id="hint"><b>WASD</b> move · <b>Space</b> jump · <b>Mouse</b> swing · <b>Wheel</b> zoom · <b>M</b> mute</div>
+  <div id="stamp"><span id="mute-state">SOUND ON</span> · <span id="build"></span></div>
+  <div id="lockhint">Click the arena to capture the mouse</div>
+
+  <div id="death">
+    <div class="big">ELIMINATED</div>
+    <div class="sub">by <b id="death-by">—</b></div>
+    <div class="timer">respawning in <span id="death-timer">3s</span></div>
+  </div>
+</div>
+
+<div id="start">
+  <h1>LUCKY BLOCKS<br />BATTLEGROUNDS</h1>
+  <h2>offline fan build</h2>
+  <p class="lead">
+    Eight blocky fighters, one arena, and blocks that drop everything from a rusty shiv to a Singularity Cannon.
+    Bots fight each other as much as they fight you. Hide in your dome, break blocks, and don't fall into the void.
+  </p>
+  <div class="tiers">
+    <span class="tier" style="color:#ffe57a">REGULAR</span>
+    <span class="tier" style="color:#ffa64d">FIRE · EPIC</span>
+    <span class="tier" style="color:#fff0a0">SHINY GOLD · LEGENDARY</span>
+    <span class="tier" style="color:#c9a6ff">GALAXY · MYTHIC</span>
+    <span class="tier" style="color:#35e0ff">??? · BIG BLOCK</span>
+  </div>
+  <button id="play-btn">Play</button>
+  <div class="keys">
+    <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move &nbsp;·&nbsp;
+    <kbd>Space</kbd> jump &nbsp;·&nbsp;
+    <kbd>Left click</kbd> attack &nbsp;·&nbsp;
+    <kbd>M</kbd> mute
+  </div>
+</div>
+
+<script src="three.global.js"></script>
+<script src="game.js"></script>
+<script>
+  /* offline-after-first-visit when served over http(s); ignored on file:// */
+  if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('sw.js').catch(function () {});
+    });
+  }
+</script>
+</body>
+</html>
